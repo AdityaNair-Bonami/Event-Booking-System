@@ -1,0 +1,8 @@
+# for not pushing our virtual environment (venv/) or your local database file to GitHub
+
+venv/
+__pycache__/
+*.pyc
+.env
+event_system.db
+.pytest_cache/

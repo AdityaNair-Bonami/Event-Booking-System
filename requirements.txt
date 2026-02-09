@@ -1,0 +1,10 @@
+fastapi         # our web framework
+uvicorn         # the server to run FastAPI
+sqlalchemy      # the database ORM (object-relations mapping using Python instead of raw SQL)
+psycopg2-binary # PostgreSQL driver
+pydantic        # data validation
+python-jose     # for JSON web token authentication
+passlib         # for password hashing
+celery          # for asynchronous tasks
+redis           # the message broker for celery
+pytest          # for unit testing
