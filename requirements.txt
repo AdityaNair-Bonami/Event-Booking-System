@@ -10,3 +10,4 @@ redis           # the message broker for celery
 pytest          # for unit testing
 httpx           # for testing FastAPI
 alembic         # for tracking changes to database
+email-validator # for EmailStr validation
