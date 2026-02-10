@@ -8,3 +8,5 @@ passlib         # for password hashing
 celery          # for asynchronous tasks
 redis           # the message broker for celery
 pytest          # for unit testing
+httpx           # for testing FastAPI
+alembic         # for tracking changes to database
