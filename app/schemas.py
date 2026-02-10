@@ -3,7 +3,7 @@ Data shapes (Pydantic). This defines what the data should
 look like when a user sends a request
 """
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import List, Optional
 from datetime import datetime
 
@@ -23,7 +23,7 @@ class UserUpdate(BaseModel):
 class User(UserBase):
     id: int
     class Config:
-        from_attributes = True
+        model_config = ConfigDict(from_attributes=True)
 
 
 # ticket schemas
@@ -39,7 +39,7 @@ class Ticket(TicketBase):
     id: int
     event_id: int
     class Config:
-        from_attributes = True
+        model_config = ConfigDict(from_attributes=True)
 
 
 # event schemas
@@ -65,7 +65,7 @@ class Event(EventBase):
     status:str
     tickets: List[Ticket] = []
     class Config:
-        from_attributes = True
+        model_config = ConfigDict(from_attributes=True)
 
 
 # booking schemas
@@ -80,4 +80,4 @@ class Booking(BaseModel):
     quantity: int
     status: str
     class Config:
-        from_attributes = True
+        model_config = ConfigDict(from_attributes=True)
