@@ -9,6 +9,14 @@ from .database import Base
 import enum
 
 
+class EventStatus(str, enum.Enum):
+    ACTIVE = "active"
+    CANCELLED = "cancelled"
+
+class BookingStatus(str, enum.Enum):
+    CONFIRMED = "confirmed"
+    CANCELLED = "cancelled"
+
 class UserRole(enum.Enum):
     ORGANIZER = "organizer"
     CUSTOMER = "customer"
@@ -22,8 +30,8 @@ class User(Base):
     role = Column(String)
 
     # relationships
-    events = relationship("Event", back_populates="organizer")
-    bookings = relationship("Bookings", back_populates="customer")
+    events = relationship("Event", back_populates="organizer", cascade="all, delete-orphan")
+    bookings = relationship("Booking", back_populates="customer", cascade="all, delete-orphan")
 
 
 class Event(Base):
@@ -34,6 +42,7 @@ class Event(Base):
     date = Column(DateTime)
     venue = Column(String)
     organizer_id = Column(Integer, ForeignKey("users.id"))
+    status = Column(String, default=EventStatus.ACTIVE.value)
 
     organizer = relationship("User", back_populates="events")
     tickets = relationship("Ticket", back_populates="event")
@@ -48,7 +57,7 @@ class Ticket(Base):
     quantity_available = Column(Integer)
 
     event = relationship("Event", back_populates="tickets")
-    bookings = relationship("Booking", back_populates="ticket")
+    bookings = relationship("Booking", back_populates="ticket", cascade="all, delete-orphan")
 
 
 class Booking(Base):
@@ -57,8 +66,7 @@ class Booking(Base):
     customer_id = Column(Integer, ForeignKey("users.id"))
     ticket_id = Column(Integer, ForeignKey("tickets.id"))
     quantity = Column(Integer)
+    status = Column(String, default=BookingStatus.CONFIRMED.value)
 
     customer = relationship("User", back_populates="bookings")
     ticket = relationship("Ticket", back_populates="bookings")
-
-

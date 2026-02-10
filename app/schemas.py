@@ -16,6 +16,10 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str
 
+class UserUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+
 class User(UserBase):
     id: int
     class Config:
@@ -48,9 +52,17 @@ class EventBase(BaseModel):
 class EventCreate(EventBase):
     tickets: List[TicketCreate] # when creating an event, we include ticket types
 
+class EventUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    date: Optional[datetime] = None
+    venue: Optional[str] = None
+    status: Optional[str] = None
+
 class Event(EventBase):
     id: int
     organizer_id: int
+    status:str
     tickets: List[Ticket] = []
     class Config:
         from_attributes = True
@@ -66,6 +78,6 @@ class Booking(BaseModel):
     customer_id: int
     ticket_id: int
     quantity: int
+    status: str
     class Config:
         from_attributes = True
-
