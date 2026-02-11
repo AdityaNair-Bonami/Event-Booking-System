@@ -2,8 +2,10 @@
 Create, Read, Update and Delete logic
 """
 
+from sqlalchemy import extract, or_, func
 from sqlalchemy.orm import Session
 from typing import List, Optional, Any
+from datetime import datetime
 from . import models, schemas
 
 
@@ -66,6 +68,44 @@ def delete_event(db: Session, event_id: int):
         db.commit()
     return db_event
 
+def search_events(db: Session, location: str = None, is_weekend: bool = None, date: datetime = None, time_slot: str = None):
+    # default active events
+    query = db.query(models.Event).filter(models.Event.status == "active")
+
+    # searching by venue
+    if location and location.strip():
+        query = query.filter(models.Event.venue.ilike(f"%{location}"))
+
+    # searching by date 
+    if date:
+        query = query.filter(func.date(models.Event.date) == date.date())
+    else:
+        query = query.filter(models.Event.date >= datetime.now())
+    
+    # searching by time slot
+    if time_slot:
+        hour_col = func.strftime('%H', models.Event.date)
+        ts = time_slot.lower().strip()
+        if ts == "morning":
+            query = query.filter(hour_col >= '06', hour_col < '12')
+        elif ts in ["noon", "afternoon"]:
+            query = query.filter(hour_col >= '12', hour_col < '17')
+        elif ts == "evening":
+            query = query.filter(hour_col >= '17', hour_col < '21')
+        elif ts == "night":
+            query = query.filter(or_(hour_col >= '21', hour_col < '06'))
+    
+    # weekend flag
+    if is_weekend is not None:
+        dow = dow = func.strftime('%w', models.Event.date)
+        if is_weekend is True:
+            # 0-6 with 0 as Sunday and 6 as Saturday
+            query = query.filter(or_(dow == '0', dow == '6'))
+        else:
+            # 1-5 for weekdays
+            query = query.filter(dow.in_(['1', '2', '3', '4', '5']))
+    
+    return query.all()
 
 # booking logic for customers
 def create_booking(db: Session, booking: schemas.BookingCreate, customer_id: int):

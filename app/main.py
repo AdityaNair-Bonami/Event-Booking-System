@@ -7,6 +7,7 @@ from typing import List, Any
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from datetime import datetime
 from . import models, schemas, database, auth, crud, tasks
 
 app = FastAPI(title="Event Booking System")
@@ -131,6 +132,30 @@ def cancel_booking(
     confirm_task: Any = tasks.send_booking_confirmation
     confirm_task.delay(current_user.email, f"CANCELLED: {booking.ticket.event.title}")
     return booking
+
+@app.get("/events/search", response_model=List[schemas.Event])
+def search_events(
+    venue: str = None,
+    event_date: datetime = None,
+    is_weekend: bool = None,
+    time_slot: str = None,
+    db: Session = Depends(database.get_db)
+):
+    results = crud.search_events(
+        db, 
+        location=venue,
+        date=event_date,
+        is_weekend=is_weekend,
+        time_slot=time_slot
+    )
+
+    if not results:
+        raise HTTPException(
+            status_code=404, 
+            detail="No events found matching the search criteria"
+        )
+    
+    return results
 
 # --- PROFILE MANAGEMENT (BOTH ROLES) ---
 
