@@ -1,41 +1,22 @@
-import sqlite3
 import os
+from app.database import engine, Base
+from app import models  # Essential: This registers the models with SQLAlchemy
 
 def reset_database():
     db_path = "event_system.db"
     
-    if not os.path.exists(db_path):
-        print(f"❌ Database file {db_path} not found.")
-        return
-
+    # 1. Remove the old database file if it exists
+    if os.path.exists(db_path):
+        print(f"🗑️  Removing old database: {db_path}")
+        os.remove(db_path)
+    
+    # 2. Use SQLAlchemy to create the tables from scratch
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        # Disable foreign keys temporarily
-        cursor.execute("PRAGMA foreign_keys = OFF;")
-
-        # Get all table names (excluding internal sqlite tables and alembic migrations)
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'alembic%';")
-        tables = cursor.fetchall()
-
-        for table in tables:
-            table_name = table[0]
-            print(f"🧹 Clearing table: {table_name}...")
-            cursor.execute(f"DELETE FROM {table_name};")
-            
-            # Check if sqlite_sequence exists before trying to clear it
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_sequence';")
-            if cursor.fetchone():
-                cursor.execute(f"DELETE FROM sqlite_sequence WHERE name='{table_name}';")
-
-        conn.commit()
-        cursor.execute("PRAGMA foreign_keys = ON;")
-        conn.close()
-        print("\n✨ Database is now sparkling clean! Ready for the demo.")
-
+        print("🏗️  Creating fresh tables based on models...")
+        Base.metadata.create_all(bind=engine)
+        print("✨ Database recreated with professional logic!")
     except Exception as e:
-        print(f"💥 Error resetting database: {e}")
+        print(f"💥 Error creating database: {e}")
 
 if __name__ == "__main__":
     reset_database()

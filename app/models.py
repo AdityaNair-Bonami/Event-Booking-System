@@ -3,7 +3,7 @@ Database tables (SQLAlchemy). Handling organizers,
 customers, events, tickets, and bookings.
 """
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, Enum, select, func
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, Enum, select, func, case
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.hybrid import hybrid_property
 from .database import Base
@@ -53,21 +53,24 @@ class Event(Base):
     tickets = relationship("Ticket", back_populates="event")
 
     @hybrid_property # calculates inventory status based on remaining tickets
-    def inventory_status(eslf):
+    def inventory_status(self):
+        if not self.tickets:
+            return InventoryStatus.AVAILABLE.value
         total_remaining = sum(t.quantity_available for t in self.tickets)
         return InventoryStatus.AVAILABLE.value if total_remaining > 0 else InventoryStatus.SOLD_OUT.value
     
     @inventory_status.expression # allows filtering by inventory status in sorting queries
     def inventory_status(cls):
-        ticket_sum = (
+        ticket_sum_query = (
             select(func.sum(Ticket.quantity_available))
             .where(Ticket.event_id == cls.id)
             .correlate(cls)
-            .as_scalar()
         )
+        
+        ticket_sum = ticket_sum_query.scalar_subquery()
 
-        return func.case(
-            (ticket_sum > 0, InventoryStatus.AVAILABLE.value),
+        return case(
+            (func.coalesce(ticket_sum, 0) > 0, InventoryStatus.AVAILABLE.value),
             else_=InventoryStatus.SOLD_OUT.value
         )
 
