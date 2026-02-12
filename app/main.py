@@ -70,10 +70,10 @@ def update_existing_event(
         raise HTTPException(status_code=404, detail="Event not found!")
 
     # If event was updated or cancelled, notify customers via Celery
-    emails = [b.customer.email for t in db_event.tickets for b in t.bookings if str(b.status) == "confirmed"]
+    emails = [b.customer.email for t in db_event.tickets for b in t.bookings if b.status == models.BookingStatus.CONFIRMED.value]
     if emails:
         task_func: Any = tasks.notify_event_update
-        msg = f"Update for {db_event.title}" if str(db_event.status) == "active" else f"CANCELLED: {db_event.title}"
+        msg = f"Update for {db_event.title}" if db_event.status == models.EventStatus.ACTIVE.value else f"CANCELLED: {db_event.title}"
         task_func.delay(list(set(emails)), msg)
     
     return db_event

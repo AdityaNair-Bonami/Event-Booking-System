@@ -63,6 +63,7 @@ class Event(EventBase):
     id: int
     organizer_id: int
     status:str
+    inventory_status: str
     tickets: List[Ticket] = []
     class Config:
         model_config = ConfigDict(from_attributes=True)

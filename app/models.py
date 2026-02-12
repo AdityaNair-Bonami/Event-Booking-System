@@ -3,8 +3,9 @@ Database tables (SQLAlchemy). Handling organizers,
 customers, events, tickets, and bookings.
 """
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, Enum, select, func
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.hybrid import hybrid_property
 from .database import Base
 import enum
 
@@ -12,6 +13,10 @@ import enum
 class EventStatus(str, enum.Enum):
     ACTIVE = "active"
     CANCELLED = "cancelled"
+
+class InventoryStatus(str, enum.Enum):
+    AVAILABLE = "available"
+    SOLD_OUT = "sold_out"
 
 class BookingStatus(str, enum.Enum):
     CONFIRMED = "confirmed"
@@ -46,6 +51,25 @@ class Event(Base):
 
     organizer = relationship("User", back_populates="events")
     tickets = relationship("Ticket", back_populates="event")
+
+    @hybrid_property # calculates inventory status based on remaining tickets
+    def inventory_status(eslf):
+        total_remaining = sum(t.quantity_available for t in self.tickets)
+        return InventoryStatus.AVAILABLE.value if total_remaining > 0 else InventoryStatus.SOLD_OUT.value
+    
+    @inventory_status.expression # allows filtering by inventory status in sorting queries
+    def inventory_status(cls):
+        ticket_sum = (
+            select(func.sum(Ticket.quantity_available))
+            .where(Ticket.event_id == cls.id)
+            .correlate(cls)
+            .as_scalar()
+        )
+
+        return func.case(
+            (ticket_sum > 0, InventoryStatus.AVAILABLE.value),
+            else_=InventoryStatus.SOLD_OUT.value
+        )
 
 
 class Ticket(Base):

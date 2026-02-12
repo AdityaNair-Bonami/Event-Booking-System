@@ -39,7 +39,7 @@ def create_event(db: Session, event: schemas.EventCreate, organizer_id: int):
 
 
 def get_events(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Event).filter(models.Event.status == "active").offset(skip).limit(limit).all()
+    return db.query(models.Event).filter(models.Event.status == models.EventStatus.ACTIVE.value).order_by(models.Event.inventory_status.asc(), models.Event.date.asc()).offset(skip).limit(limit).all()
 
 def get_organizer_events(db: Session, organizer_id: int):
     return db.query(models.Event).filter(models.Event.organizer_id == organizer_id).all()
@@ -52,10 +52,10 @@ def update_event(db: Session, event_id: int, event_update: schemas.EventUpdate):
         for key, value in update_data.items():
             setattr(db_event, key, value)
         # if an event is cancelled, cancel all associated bookings
-        if event_update.status == "cancelled":
+        if event_update.status == models.EventStatus.CANCELLED.value:
             bookings = db.query(models.Booking).join(models.Ticket).filter(models.Ticket.event_id == event_id).all()
             for b in bookings:
-                setattr(b, "status", "cancelled")
+                b.status = models.BookingStatus.CANCELLED.value
         
         db.commit()
         db.refresh(db_event)
@@ -69,8 +69,8 @@ def delete_event(db: Session, event_id: int):
     return db_event
 
 def search_events(db: Session, location: str = None, is_weekend: bool = None, date: datetime = None, time_slot: str = None):
-    # default active events
-    query = db.query(models.Event).filter(models.Event.status == "active")
+    # default active events first and sold out events later, all of these by date ascending
+    query = db.query(models.Event).filter(models.Event.status == models.EventStatus.ACTIVE.value)
 
     # searching by venue
     if location and location.strip():
@@ -105,7 +105,7 @@ def search_events(db: Session, location: str = None, is_weekend: bool = None, da
             # 1-5 for weekdays
             query = query.filter(dow.in_(['1', '2', '3', '4', '5']))
     
-    return query.all()
+    return query.order_by(models.Event.inventory_status.asc(), models.Event.date.asc()).all()
 
 # booking logic for customers
 def create_booking(db: Session, booking: schemas.BookingCreate, customer_id: int):
@@ -116,22 +116,23 @@ def create_booking(db: Session, booking: schemas.BookingCreate, customer_id: int
         return None
     
     # converting the column value to python int for comparison
-    current_qty = getattr(db_ticket, 'quantity_available')
-    if int(current_qty) < booking.quantity:
+    if db_ticket.quantity_available < booking.quantity:
         return None
 
     # deducting stock
-    setattr(db_ticket, 'quantity_available', current_qty - booking.quantity)
+    db_ticket.quantity_available -= booking.quantity
 
     new_booking = models.Booking(
         customer_id = customer_id,
         ticket_id = booking.ticket_id,
         quantity = booking.quantity,
-        status="confirmed"
+        status=models.BookingStatus.CONFIRMED.value
     )
+    
     db.add(new_booking)
     db.commit()
     db.refresh(new_booking)
+    db.refresh(db_ticket) # refreshing ticket to get updated quantity for inventory status calculation
     return new_booking
 
 def get_user_bookings(db: Session, user_id: int):
@@ -142,14 +143,13 @@ def get_event_bookings(db: Session, event_id:int):
 
 def cancel_booking(db: Session, booking_id: int, user_id: int):
     booking = db.query(models.Booking).filter(models.Booking.id == booking_id, models.Booking.customer_id == user_id).first()
-    if booking and str(booking.status) !="cancelled":
-        setattr(booking, "status", "cancelled")
+    
+    if booking and booking.status != models.BookingStatus.CANCELLED.value:
+        booking.status = models.BookingStatus.CANCELLED.value
         ticket = db.query(models.Ticket).filter(models.Ticket.id == booking.ticket_id).first()
         if ticket:
-            current_qty = getattr(ticket, "quantity_available")
-            booked_qty = getattr(booking, "quantity")
-            new_qty = current_qty + booked_qty
-            setattr(ticket, "quantity_available", new_qty)
+            ticket.quantity_available += booking.quantity # adding the cancelled quantity back to available stock
+
         db.commit()
         db.refresh(booking)
     return booking
