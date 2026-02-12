@@ -39,7 +39,7 @@ def create_event(db: Session, event: schemas.EventCreate, organizer_id: int):
 
 
 def get_events(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Event).filter(models.Event.status == models.EventStatus.ACTIVE.value).order_by(models.Event.inventory_status.asc(), models.Event.date.asc()).offset(skip).limit(limit).all()
+    return db.query(models.Event).filter(models.Event.status == models.EventStatus.ACTIVE.value, models.Event.deleted_at == None).order_by(models.Event.inventory_status.asc(), models.Event.date.asc()).offset(skip).limit(limit).all()
 
 def get_organizer_events(db: Session, organizer_id: int):
     return db.query(models.Event).filter(models.Event.organizer_id == organizer_id).all()
@@ -64,13 +64,14 @@ def update_event(db: Session, event_id: int, event_update: schemas.EventUpdate):
 def delete_event(db: Session, event_id: int):
     db_event = db.query(models.Event).filter(models.Event.id == event_id).first()
     if db_event:
-        db.delete(db_event)
+        db_event.deleted_at = datetime.now() # soft delete by setting deleted_at timestamp
+        db_event.status = models.EventStatus.CANCELLED.value # marking the event as cancelled to prevent it from showing up in active listings
         db.commit()
     return db_event
 
 def search_events(db: Session, location: str = None, is_weekend: bool = None, date: datetime = None, time_slot: str = None):
     # default active events first and sold out events later, all of these by date ascending
-    query = db.query(models.Event).filter(models.Event.status == models.EventStatus.ACTIVE.value)
+    query = db.query(models.Event).filter(models.Event.status == models.EventStatus.ACTIVE.value, models.Event.deleted_at == None)
 
     # searching by venue
     if location and location.strip():
@@ -110,7 +111,7 @@ def search_events(db: Session, location: str = None, is_weekend: bool = None, da
 # booking logic for customers
 def create_booking(db: Session, booking: schemas.BookingCreate, customer_id: int):
     # checking for ticket availability
-    db_ticket = db.query(models.Ticket).filter(models.Ticket.id == booking.ticket_id).first()
+    db_ticket = db.query(models.Ticket).filter(models.Ticket.id == booking.ticket_id).with_for_update().first() # locking the row for update to prevent race conditions
     
     if not db_ticket:
         return None
@@ -142,11 +143,11 @@ def get_event_bookings(db: Session, event_id:int):
     return db.query(models.Booking).join(models.Ticket).filter(models.Ticket.event_id == event_id).all()
 
 def cancel_booking(db: Session, booking_id: int, user_id: int):
-    booking = db.query(models.Booking).filter(models.Booking.id == booking_id, models.Booking.customer_id == user_id).first()
+    booking = db.query(models.Booking).filter(models.Booking.id == booking_id, models.Booking.customer_id == user_id).with_for_update().first() # locking the row for update to prevent race conditions
     
     if booking and booking.status != models.BookingStatus.CANCELLED.value:
         booking.status = models.BookingStatus.CANCELLED.value
-        ticket = db.query(models.Ticket).filter(models.Ticket.id == booking.ticket_id).first()
+        ticket = db.query(models.Ticket).filter(models.Ticket.id == booking.ticket_id).with_for_update().first() # locking the row for update to prevent    
         if ticket:
             ticket.quantity_available += booking.quantity # adding the cancelled quantity back to available stock
 

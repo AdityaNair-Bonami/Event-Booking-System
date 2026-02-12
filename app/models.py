@@ -48,6 +48,7 @@ class Event(Base):
     venue = Column(String)
     organizer_id = Column(Integer, ForeignKey("users.id"))
     status = Column(String, default=EventStatus.ACTIVE.value)
+    deleted_at = Column(DateTime, nullable=True)
 
     organizer = relationship("User", back_populates="events")
     tickets = relationship("Ticket", back_populates="event")
