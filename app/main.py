@@ -107,7 +107,7 @@ def book_event_ticket(
         raise HTTPException(status_code=400, detail="Tickets unavailable or insufficient")
     
     confirm_task: Any = tasks.send_booking_confirmation
-    confirm_task.delay(current_user.email, f"Confirmed: {new_booking.ticket.event.title}")
+    confirm_task.delay(current_user.email, f"CONFIRMED: {new_booking.ticket.event.title}")
     return new_booking
 
 @app.get("/bookings/my", response_model=List[schemas.Booking])
@@ -125,13 +125,39 @@ def cancel_booking(
     current_user: models.User = Depends(auth.require_role("customer"))
 ):
     user_id = int(getattr(current_user, 'id'))
-    booking = crud.cancel_booking(db, booking_id, user_id)
+
+    # getting the booking and list of people who got auto-booked
+    booking, fullfilled_users = crud.cancel_booking(db, booking_id, user_id)
+    
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found or already cancelled")
     
-    confirm_task: Any = tasks.send_booking_confirmation
-    confirm_task.delay(current_user.email, f"CANCELLED: {booking.ticket.event.title}")
+    # notifying the user about cancellation
+    tasks.send_booking_confirmation.delay(current_user.email, f"CANCELLED: {booking.ticket.event.title}")
+
+    # notifying the user(s) who got confirmed tickets from waitlist
+    for user_data in fullfilled_users:
+        tasks.send_booking_confirmation.delay(
+            user_data["email"],
+            f"CONFIRMED from Waitlist: {booking.ticket.event.title} (Quantity: {user_data['quantity']})"
+        )
+    
     return booking
+
+@app.post("/tickets/{ticket_id}/waitlist", response_model=schemas.WaitlistResponse)
+def join_waitlist(ticket_id: int, waitlist_data: schemas.WaitlistBase,db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.get_current_user)):
+    result = crud.join_waitlist(db, ticket_id=ticket_id, user_id=current_user.id, quantity=waitlist_data.quantity)
+
+    if result == "EXCEEDS_CAPACITY":
+        raise HTTPException(status_code=400, detail="Requested quantity exceeds total event capacity")
+    
+    # notifying the user for waitlisting
+    tasks.send_booking_confirmation.delay(
+        current_user.email,
+        f"WAITLISTED: You are in line for {waitlist_data.quantity} ticket(s)."
+    )
+
+    return result
 
 @app.get("/events/search", response_model=List[schemas.Event])
 def search_events(
