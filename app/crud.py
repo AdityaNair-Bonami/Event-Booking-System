@@ -145,16 +145,75 @@ def get_event_bookings(db: Session, event_id:int):
 def cancel_booking(db: Session, booking_id: int, user_id: int):
     booking = db.query(models.Booking).filter(models.Booking.id == booking_id, models.Booking.customer_id == user_id).with_for_update().first() # locking the row for update to prevent race conditions
     
-    if booking and booking.status != models.BookingStatus.CANCELLED.value:
-        booking.status = models.BookingStatus.CANCELLED.value
-        ticket = db.query(models.Ticket).filter(models.Ticket.id == booking.ticket_id).with_for_update().first() # locking the row for update to prevent    
+    if not booking or booking.status == models.BookingStatus.CANCELLED.value:
+        return booking, []
+
+    booking.status = models.BookingStatus.CANCELLED.value
+    ticket_id = booking.ticket_id
+    available_to_reassign = booking.quantity
+    fulfilled_users = [] # to keep track of waitlist users who got fulfilled from this cancellation
+
+    print(f"DEBUG: Cancelling {available_to_reassign} tickets for booking ID {ticket_id}")
+
+    # keep fulfilling the cancelled booking quantity from the waitlist before adding back to available stock
+    while available_to_reassign > 0:
+        all_waiting = db.query(models.Waitlist).filter(models.Waitlist.ticket_id == ticket_id).all()
+        print(f"DEBUG: Total people on waitlist for this: {len(all_waiting)}")
+        
+        # checking the waitlist with the first entry for same event
+        waitlist_entry = db.query(models.Waitlist).filter(models.Waitlist.ticket_id == ticket_id, models.Waitlist.quantity <= available_to_reassign).order_by(models.Waitlist.created_at.asc()).with_for_update().first()
+
+        if not waitlist_entry:
+            print(f"DEBUG: No suitable waitlist entry found. Breaking loop")
+            break
+
+        print(f"DEBUG: Fulfilling waitlist for User {waitlist_entry.user_id} with {waitlist_entry.quantity} tickets")
+        
+        new_booking = models.Booking(customer_id=waitlist_entry.user_id, ticket_id=ticket_id, quantity=waitlist_entry.quantity, status=models.BookingStatus.CONFIRMED.value)
+        db.add(new_booking)
+
+        # track the user and their email for notification
+        fulfilled_users.append({
+            "email": waitlist_entry.user.email,
+            "event_title": waitlist_entry.ticket.event.title,
+            "quantity": waitlist_entry.quantity
+        })
+
+        available_to_reassign -= waitlist_entry.quantity
+        db.delete(waitlist_entry)
+        db.flush() # flushing after each assignment to update the available quantity for next waitlist entry
+
+    if available_to_reassign > 0:
+        # adding the remaining quantity back to available stock
+        ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id).with_for_update().first()
         if ticket:
-            ticket.quantity_available += booking.quantity # adding the cancelled quantity back to available stock
+            ticket.quantity_available += available_to_reassign
+            print(f"DEBUG: Returned {available_to_reassign} tickets to genarak slot")
+    
+    db.commit()
+    db.refresh(booking)
+    return booking, fulfilled_users
 
-        db.commit()
-        db.refresh(booking)
-    return booking
+def join_waitlist(db: Session, ticket_id: int, user_id: int, quantity: int):
+    # not allowing to make duplicate waitlist entries for same user and ticket
+    existing = db.query(models.Waitlist).filter(models.Waitlist.ticket_id == ticket_id, models.Waitlist.user_id == user_id).first()
 
+    if existing:
+        return existing
+    
+    # not allowing to join waitlist with quantity more than total capacity of the event
+    ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id).first()
+
+    total_ever_available = ticket.quantity_available + db.query(func.sum(models.Booking.quantity)).filter(models.Booking.ticket_id == ticket_id, models.Booking.status == "confirmed").scalar() or 0
+
+    if quantity > total_ever_available:
+        return "EXCEEDS_CAPACITY"
+
+    new_entry = models.Waitlist(ticket_id=ticket_id, user_id=user_id, quantity=quantity)
+    db.add(new_entry)
+    db.commit()
+    db.refresh(new_entry)
+    return new_entry
 
 # user management
 def update_user(db: Session, user_id: int, user_update: schemas.UserUpdate):
