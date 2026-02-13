@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 SQLALCHEMY_DATABASE_URL = "sqlite:///./event_system.db"
 
 # core interface of the db is engine
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread":False})
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread":False}, echo=True)
 
 # each instance of Sessionlocal will become database session
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
