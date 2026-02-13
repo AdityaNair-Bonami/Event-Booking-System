@@ -17,5 +17,3 @@ def send_booking_confirmation(email: str, event_title: str):
 def notify_event_update(emails: list, event_title: str):
     for email in emails:
         print(f"CELERY TASK: Notifying {email} that the event '{event_title}' has been updated.")
-
-
