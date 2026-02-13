@@ -7,3 +7,6 @@ __pycache__/
 event_system.db
 .pytest_cache/
 .vscode/
+*.db
+debug_logs.txt
+*.log
