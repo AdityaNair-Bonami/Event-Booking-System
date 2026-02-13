@@ -37,6 +37,7 @@ class User(Base):
     # relationships
     events = relationship("Event", back_populates="organizer", cascade="all, delete-orphan")
     bookings = relationship("Booking", back_populates="customer", cascade="all, delete-orphan")
+    waitlist_entries = relationship("Waitlist", back_populates="user", cascade="all, delete-orphan")
 
 
 class Event(Base):
@@ -98,3 +99,18 @@ class Booking(Base):
 
     customer = relationship("User", back_populates="bookings")
     ticket = relationship("Ticket", back_populates="bookings")
+
+
+class Waitlist(Base):
+    __tablename__ = "waitlist"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    ticket_id = Column(Integer, ForeignKey("tickets.id"))
+    quantity = Column(Integer, default=1)
+    created_at = Column(DateTime, default=func.now())
+
+    # Relationships
+    event = relationship("Event")
+    user = relationship("User", back_populates="waitlist_entries")
+    ticket = relationship("Ticket")
