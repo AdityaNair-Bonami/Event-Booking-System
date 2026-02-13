@@ -82,3 +82,13 @@ class Booking(BaseModel):
     status: str
     class Config:
         model_config = ConfigDict(from_attributes=True)
+
+class WaitlistBase(BaseModel):
+    ticket_id: int
+    quantity: int = 1
+
+class WaitlistResponse(WaitlistBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
